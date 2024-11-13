@@ -1,13 +1,9 @@
 import os
-import multiprocessing
+from concurrent.futures import ThreadPoolExecutor
 
 # Fungsi untuk menambahkan 'http://' ke setiap proxy
 def convert_proxy(proxy):
     return f"http://{proxy.strip()}"
-
-# Fungsi untuk memproses proxy secara paralel menggunakan multiprocessing
-def process_proxies(proxy_chunk):
-    return [convert_proxy(proxy) for proxy in proxy_chunk]
 
 # Menentukan lokasi file output
 output_directory = "/storage/emulated/0/HTTP PROXY"
@@ -31,23 +27,16 @@ proxy_list = proxy_input.splitlines()
 if len(proxy_list) > 10000:
     print("Jumlah proxy terlalu banyak! Batasi hingga 10.000 proxy.")
 else:
-    # Tentukan ukuran chunk (misalnya, memproses dalam batch 500 proxy per proses)
-    chunk_size = 500
+    # Tentukan ukuran chunk (misalnya, memproses dalam batch 200 proxy per proses)
+    chunk_size = 200
     chunks = list(chunkify(proxy_list, chunk_size))
 
-    # Menentukan jumlah worker untuk multiprocessing
-    num_workers = multiprocessing.cpu_count()
-
-    # Memulai multiprocessing untuk mengonversi proxy secara paralel
-    with multiprocessing.Pool(num_workers) as pool:
-        # Memproses chunks proxy secara paralel
-        result = pool.map(process_proxies, chunks)
-
-    # Menggabungkan hasil konversi menjadi satu list
-    converted_proxies = [proxy for sublist in result for proxy in sublist]
-
-    # Menulis hasil konversi ke file dalam batch besar untuk efisiensi
+    # Menulis hasil konversi ke file dalam buffer besar untuk efisiensi
     with open(output_file, "w") as file:
-        file.writelines(f"{proxy}\n" for proxy in converted_proxies)
+        with ThreadPoolExecutor() as executor:
+            # Memproses chunk secara paralel
+            for converted_chunk in executor.map(lambda chunk: [convert_proxy(proxy) for proxy in chunk], chunks):
+                # Menulis setiap chunk yang sudah dikonversi
+                file.writelines(f"{proxy}\n" for proxy in converted_chunk)
 
-    print(f"{len(converted_proxies)} proxy telah dikonversi dan disimpan di {output_file}")
+    print(f"{len(proxy_list)} proxy telah dikonversi dan disimpan di {output_file}")
